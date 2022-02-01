@@ -1,0 +1,87 @@
+﻿Highrises Overview
+
+
+Summary
+
+
+Highrises is a site that was part of the HAWK acquisition, which contains ~8-9 sites in total. Highrises is the first site we have been working on since this HAWK acquisition has been around. Part of the goal is to design a structure for Highrises that will let these other sites follow suit and minimize the effort behind implementation once Highrises is up and running. 
+
+
+Focusing on Highrises, the HAWK team is currently working on redesigning the site. Initially, tracking was loosely implemented in accordance with the tracking specs. The home page, SRP, and LDP pages were tracked but were missing various properties that are needed. In addition, only a fraction of the events were being tracked. 
+
+
+Following the tracking specs linked above, I made an effort to QA the tracking implementation the HAWK team put together. This is where I discovered the various missing properties and event calls. Some of that QA documentation can be found here. 
+
+
+Due to the HAWK team being preoccupied with redesigning the site, I was given the go-ahead to fix the tracking implementation myself. Tracking for the Home Page, SRP, & LDP have been implemented and a PR has been submitted. Currently, we are waiting for a review from the HAWK team to have those changes official and pushed to production (as of 1/19/22). 
+
+
+
+
+Architecture
+
+
+RDC
+  
+
+
+
+Implementation
+
+
+HAWK Repository
+
+
+1. Fix logic centered around tracking pages and page names
+2. Homepage Tracking
+   1. Page View 
+   2. Global Header 
+   3. Featured Listing
+3. SRP Tracking
+   1. Page View
+   2. List View vs. Map View Toggle
+   3. Grid Link
+4. LDP Tracking
+   1. Page View
+   2. Accordion
+
+
+The original tracking implementation can still be seen on the development site or if you run the application locally. An easy way to see the network calls is to view the debugger in the Segment source. 
+
+
+  
+
+
+
+Here we can see these page calls are being made on an SRP page. We can see that it’s not named properly and it’s missing various properties. This is the same for homepage and LDP page calls. Before changes could be made to the homepage, SRP, or LDP, the logic behind determining a page’s name needed to be changed, which affected many aspects of the application. 
+
+
+  
+
+
+
+With the pagename logic fixed, I could move into updating the page calls and implement the track events for each page. 
+
+
+* Home Page
+   * Page View
+   * Global Head
+   * Featured Listing
+* SRP
+   * Page View
+   * List View vs. Map View toggle
+   * Grid Link
+* LDP
+   * Page View
+   * Accordion
+
+
+
+
+Next Steps
+
+
+The current scope has been focused on the homepage, SRP, & LDP tracking. The Highrises site is a bit different because it also includes a Building Homepage (BHP), Building SRP (BRP), and Building LDP (BDP). The next scope of work should be aimed at ensuring that those pages are also appropriately tracked. 
+
+
+In addition, further discussion about those pages and the required properties is required. The tracking specs do not go into great detail about the requirements for those pages.
