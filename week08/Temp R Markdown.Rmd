@@ -1,0 +1,50 @@
+---
+title: "Temp"
+author: "JADraves"
+date: "February 18, 2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Section 1
+## Section 2
+### Section 3
+
+Text can be used here to describe the section and/or the material that is showcased below.
+
+This is a code area.  It is named cars.  You will want to name the code ares as R uses theses for various reference points.
+
+```{r cars}
+summary(cars)
+```
+
+You can add additional code areas but its usually easiest to copy paste....and RENAME
+
+```{r j}
+head(cars)
+```
+
+
+```{r cars2}
+str(cars)
+```
+
+To put code in line:
+
+The mean speed rating of cars in the data set is `r mean(cars$speed)`
+```{r cars3}
+mean(cars$speed)
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
