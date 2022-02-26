@@ -1,0 +1,220 @@
+---
+title: "Health of CityX"
+author: "dfox"
+date: "2/26/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(e1071)
+library(stats)
+library(ggplot2)
+library(factoextra)
+library(corrplot)
+library(cluster)
+library(dplyr)
+library(rpart)
+
+df <- read.csv('/Users/dylanfox/OneDrive - Graceland University/Graduate Work/dsci5300-intro/final-project/cityX.csv')
+
+for (i in 1:ncol(df)) {
+  df[is.na(df[,i]), i] <- mean(df[,i], na.rm = TRUE)
+}
+
+set.seed(12)
+
+trainIDs <- sample(nrow(df), 0.7*nrow(df), replace=FALSE)
+train <- df[trainIDs,]
+test <-  df[-trainIDs,]
+```
+
+## Introduction
+
+This analysis report covers the health conditions of CityX. The mayor has come to us with a request analyze the overall health of CityX and a way to predict drastic illnesses. This will walk through the process took to better understand CityX's health, determining drastic illnesses, and the creation of models that can be used to predict these illnesses.
+
+## Summary of Health
+
+The dataset provided included a large array of variables. Each observation illustrated an area of CityX and the percentage of said area that has been diagnosed with the variable's illness. 
+
+See the columns listed below.
+
+```{r colnames, echo=FALSE}
+colnames(df)
+```
+
+### Choosing Relavent Predictors
+
+While having all these variables is nice, it makes choosing what's important more sticky. Thankfully with the help of the data dictionary and outside research, we are able to narrow down which ones can provide a general overview of the city's health. In other words, we are needing to choose Key Performance Indicators (KPIs) that will tell us the most information in the least amount of variables.
+
+The dataset provides us with two neat variables, `PHLTH_CruePrev` and `MHLTH_CrudePrev` that tell us the percentage of the population that has been diagnosed with poor Physical or Mental Health. These are good general variables, but we can do better. By using our intuition, we can pick other variables that seem like they would be good predictors of the two variables above.
+
+I started with `ACCESS2_CrudePrev`, `CHECKUP_CrudePrev`, `COREM_CrudePrev`, `COREW_CrudePrev`, `DENTAL_CrudePrev`, `LPA_CrudePrev`, and `SLEEP_CrudePrev`. These tell us the percentage of population that has no access to healthcare, frequent checkups, elderly men up to date on clinical screenings, elderly women up to date on clinical screenings, dental checkups, amount of adequate leisure/physical activity, and the amount of sleep. As you can tell, these are general metrics that don't disclose diagnosed illnesses, but rather healthy habits and other services that produce a healthy lifestyle. This means we can use these variables to further explain the overall health of CityX. To check our logic, we run a correlation between these variables and `PHLTH_CrudePrev` and `MHLTH_CrudePrev`.
+
+```{r cor, results='hide'}
+cor(df$ACCESS2_CrudePrev, df$PHLTH_CrudePrev) # 0.824
+cor(df$ACCESS2_CrudePrev, df$MHLTH_CrudePrev) # 0.870
+
+cor(df$CHECKUP_CrudePrev, df$PHLTH_CrudePrev) # -0.005
+cor(df$CHECKUP_CrudePrev, df$MHLTH_CrudePrev) # -0.537
+
+cor(df$COREM_CrudePrev, df$PHLTH_CrudePrev) # -0.781
+cor(df$COREM_CrudePrev, df$MHLTH_CrudePrev) # -0.911
+
+cor(df$COREW_CrudePrev, df$PHLTH_CrudePrev) # -0.713
+cor(df$COREW_CrudePrev, df$MHLTH_CrudePrev) # -0.830
+
+cor(df$DENTAL_CrudePrev, df$PHLTH_CrudePrev) # -0.854
+cor(df$DENTAL_CrudePrev, df$MHLTH_CrudePrev) # -0.944
+
+cor(df$LPA_CrudePrev, df$PHLTH_CrudePrev) # 0.946
+cor(df$LPA_CrudePrev, df$MHLTH_CrudePrev) # 0.877
+
+cor(df$SLEEP_CrudePrev, df$PHLTH_CrudePrev) # 0.776
+cor(df$SLEEP_CrudePrev, df$MHLTH_CrudePrev) # 0.814
+```
+
+If we dive into each correlation value, we can see that, for the most part, these variables correlate in the direction we are hoping for. For example, `ACCESS2_CrudePrev` is the percentage of population without access to healthcare. As this variable increases, it makes sense that `PHLTH_CrudePrev` and `MHLTH_CrudePrev` increase as well. They have a positive correlation. The same can be said for the rest of the variables, as well. 
+
+Now that we know these variables can help provide a summary of the city's health, we can find thet mean of each variable across the city. This will give us a quick glance into the overall health status. 
+
+```{r mean, results='hide'}
+mean(df$ACCESS2_CrudePrev) # 20.74848
+mean(df$CHECKUP_CrudePrev) # 62.66212
+mean(df$COREM_CrudePrev) # 34.1702
+mean(df$COREW_CrudePrev) # 27.85102
+mean(df$DENTAL_CrudePrev) # 65.54798
+mean(df$LPA_CrudePrev) # 22.73737
+mean(df$SLEEP_CrudePrev) # 29.74242
+```
+
+Here we can see the true overall health of CityX. A couple values that stuck out to me were that only 22% of people are getting enough leisure/physical activity and only 29% are sleeping enough at night. Physical activity and sleep are critical factors for everyone's health and are relatively easy habits to fix. With these numbers so low, it doesn't indicate that CityX's health is trending positively.
+
+## Predicting Drastic Illnesses
+
+The next part of the mayor's request is determining a model to predict drastic illnesses. The first step in accomplishing this is figuring out which illnesses can be classified as drastic. Once that is complete, we can move forward into creating a linear model, a multivariate linear model, classification model, and a nonparametric model. 
+
+### Determining Drastic Illnesses
+
+Since the dataset provided does not define illnesses as drastic or not, we must figure this out for ourselves. What constituents an illness as drastic? By doing some outside research, we can see some of the more serious illnesses and the ones that lead to the most deaths.
+
+For example, its relatively widespread knowledge that heart disease is the leading cause of death in the United States. This makes it a rather drastic illness. Continuing with that logic, we can see that other drastic illnesses included in our dataset are cancer, kidney disease, and pulmonary disease (lung disease). These four illnesses are arguably the most drastic out of the list given to us. We'll continue our models using these variables are our targets.
+
+### Single Variable Linear Regression
+
+With so many variables in our dataset, it becomes difficult to determine a single variable to use for linear regression. By using outside knowledge, we can determine a relatively good starting point in this instance. Because our target variables are `CANCER_CrudePrev`, `CHD_CrudePrev`, `KIDNEY_CrudePrev`, and `COPD_CrudePrev`, we can research what are the leading causes of each disease respectively. 
+
+We'll start with `CANCER_CrudePrev`. High cholesterol is one of the leading causes to certain types of cancer, so we'll use that as our predictor variable. 
+
+#### Cancer
+
+```{r cancer}
+cor(df$HIGHCHOL_CrudePrev, df$CANCER_CrudePrev)
+cancer.lin <- lm(CANCER_CrudePrev ~ HIGHCHOL_CrudePrev, data=df)
+plot(df$HIGHCHOL_CrudePrev, df$CANCER_CrudePrev)
+abline(cancer.lin)
+mean((predict(cancer.lin, df) - df[["CANCER_CrudePrev"]])^2)
+```
+
+As showcased above, we can see that our linear regression line (line of best fit) doesn't do a terrible job of predicting the percentage of the population diagnosed with cancer. For a single variable, it does alright. This makes sense when we compare it to the correlation value between the two variables. They have a relatively high correlation value. 
+
+We can continue this process for the other three illnesses.
+
+#### Heart Disease
+
+```{r hd}
+cor(df$CHD_CrudePrev, df$OBESITY_CrudePrev)
+chd.lin <- lm(CHD_CrudePrev ~ OBESITY_CrudePrev, data=df)
+plot(df$OBESITY_CrudePrev, df$CHD_CrudePrev)
+abline(chd.lin)
+mean((predict(chd.lin, df) - df[["CHD_CrudePrev"]])^2)
+```
+
+#### Kidney Disease
+
+```{r kidney}
+cor(df$BPHIGH_CrudePrev, df$KIDNEY_CrudePrev)
+kidney.lin <- lm(KIDNEY_CrudePrev ~ BPHIGH_CrudePrev, data=df)
+plot(df$BPHIGH_CrudePrev, df$KIDNEY_CrudePrev)
+abline(kidney.lin)
+mean((predict(kidney.lin, df) - df[["KIDNEY_CrudePrev"]])^2)
+```
+
+#### Pulmonary Disease
+
+```{r copd}
+copd.lin <- lm(COPD_CrudePrev ~ CSMOKING_CrudePrev, data=df)
+plot(df$CSMOKING_CrudePrev, df$COPD_CrudePrev)
+abline(copd.lin)
+cor(df$COPD_CrudePrev, df$CSMOKING_CrudePrev)
+mean((predict(copd.lin, df) - df[["COPD_CrudePrev"]])^2)
+```
+
+In essence, these linear regression models are relatively good. They have low MSE values and do a fine job predicting drastic illnesses when we are only using a single variable. This is a good way to start understanding the data, predictors, and potential ways of moving forward.
+
+### Multivariate Linear Regression
+
+Going forward, we will focus predicting Heart Disease, rather than all four drastic illnesses that were listed above. If it was needed though, the same applications that will follow could be used to predict the other illnesses as well.
+
+Creating a multivariable linear fit is very similar to the process used for a single variable fit. In the case of Heart Disease, we look further down the list of the known causes of this sickness. In the single variable case, we used the percentage of population diagnosed as obese. In the multivariable case, we'll expand this to include high cholesterol, blood pressure, and amount of leisure/physical activity.
+
+Shown below is how the model was created and the MSE. The histogram shows a distribution of how well the model performed. It records the difference between the actual and predicted value.
+
+```{r multi}
+chd.multi <- lm(CHD_CrudePrev ~ OBESITY_CrudePrev + HIGHCHOL_CrudePrev +
+                  BPHIGH_CrudePrev + LPA_CrudePrev, data=df)
+mean((predict(chd.multi, df) - df[["CHD_CrudePrev"]])^2)
+
+chd.multi.p <- predict(chd.multi, df)
+chd.multi.b <- df$CHD_CrudePrev
+chd.multi.q <- data.frame(cbind(chd.multi.b, chd.multi.p)) 
+chd.multi.diff <- (chd.multi.q$chd.multi.b-chd.multi.q$chd.multi.p)/chd.multi.q$chd.multi.b*100
+hist(chd.multi.diff, breaks=30)
+```
+
+Taking a look at the histogram, we can see that the bulk of our distribution is close to 0. This means that the difference between the actual value and predicted value was close to 0. This is a good sign. Furthermore, our MSE value is 0.15. If travel back to our linear model about Heart Disease, our MSE was 0.60. We can see that our value has decreased, thus meaning our accuracy has increased. With this in mind, we can determine that this multivariable model is doing a better job at predicting the percentage of population diagnosed with heart disease when compared with our single variable model. 
+
+### Classification -- Decision Tree
+
+Due to the nature of our dataset being all numerical values, this makes it harder to run a classification model on our data. For this reason, I've decided to create a Decision Tree. Decision Trees will allow us to break each observation up depending on the values of specific variables. At the end, it will classify the observation into a value for Heart Disease that it deems most realistic. See the tree below.
+
+```{r dt}
+fit <- rpart(CHD_CrudePrev ~ OBESITY_CrudePrev + HIGHCHOL_CrudePrev +
+               BPHIGH_CrudePrev + LPA_CrudePrev, data=df)
+
+par(mar=c(2 ,2, 2, 2))
+plot(fit, uniform = TRUE)
+text(fit, digits=6)
+```
+
+As seen above, we continue predicting Heart Disease with our four predictor variables. Most of the nodes on this tree are pointing towards the blood pressure value of the observation. This makes me believe that blood pressure is a critical value in predicting heart disease. As mentioned before, classification isn't the most ideal approach for this request, mainly due to the nature of our data and its numerical metrics.
+
+### Nonparametric Method -- LOESS
+
+A LOESS model is very interesting. It calculates values similar to a linear model, but it puts more weight on points that nearby. For example, if a dataset has a few outliers, a LOESS model will put less weight on those values and more on the ones nearby. This allows us to see past any anomalies and focus primarily on values stick to the predictive trend.
+
+```{r loess}
+loess.model <- loess(CHD_CrudePrev ~ OBESITY_CrudePrev + HIGHCHOL_CrudePrev +
+                       BPHIGH_CrudePrev + LPA_CrudePrev, data=train)
+mean((predict(loess.model, df) - df[["CHD_CrudePrev"]])^2)
+
+loess.p <- predict(loess.model, test)
+loess.b <- test$CHD_CrudePrev
+loess.q <- data.frame(cbind(loess.b, loess.p)) 
+loess.diff <- (loess.q$loess.b-loess.q$loess.p)/loess.q$loess.b*100
+hist(loess.diff, breaks=30)
+```
+
+After running this model, we receive interesting results. To start, we can see that our MSE value has increased slightly when compared to our multivariable model, but is still smaller than our single variable model. In addition, our histogram that depicts the distribution of the differences between actual and predicted value is negatively skewed. One reason for this could be the fact that our data may not contain many outliers. Therefore, the LOESS model is putting less weight on observations that may still be important. This can explain the increase in MSE and the negative skew in our histogram. 
+
+Overall, this gives us more information now. We know that our multivariable model still performs better than our nonparametric approach. Going forward, we can make the assumption that our data is relatively linear and we should focus on using algorithms that best suit that type of data.
+
+## Summary
+
+To recap, we've delivered on the mayor's requests. We've presented a way to view the overall health of CityX. By using outside research and examining the relationship between data, the mayor can quickly a few Key Performance Indicators of the health status of their city. 
+
+In addition, we've explored and determined several drastic illnesses that plague the city. Through outside research and the exploration of different models, the mayor has the ability to now predict certain illnesses and prepare for them, all based on a handful of predictor variables. 
+
+Going forward, I would recommend the mayor to continue using the multivariate regression that was applied above. So far, this has proved to be the most accurate model. In addition, we can continue our work of integrating more predictor variables that can potentially increase the accuracy of our model. Another potential focus can researching the use of clustering algorithms for this cause. While it wasn't a primary focus for this request, it could prove useful in seeing if different areas of the city are more prone to certain illnesses. For example, if a handful of observations are more prone to Cancer, it would be worth looking into the environment that those observations are in. 
+
+Finally, the mayor can also move into truly classifying the state of each variable and its priority. This would further increase and refine what variables/illnesses are truly serious and need attention. The results provided here are a good starting point and accomplish what the mayor requests, but there is a lot of potential to continue this research to fully understand the health of CityX and its causes. 
